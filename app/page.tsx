@@ -23,7 +23,6 @@ import {
   Wind,
   Sun,
   Moon,
-  CloudRain,
   Leaf,
   Flame,
   Activity,
@@ -32,9 +31,8 @@ import {
   Maximize2,
   Minimize2,
 } from "lucide-react";
-import { getAiPredictUrl, getEsp32WsUrl, CHART_HISTORY_LENGTH } from "@/lib/config";
-import type { SensorData, AIPrediction } from "@/lib/types";
-import { getAQICategory } from "@/lib/types";
+import { getEsp32WsUrl, CHART_HISTORY_LENGTH } from "@/lib/config";
+import type { SensorData } from "@/lib/types";
 
 function formatVal(
   v: number | undefined,
@@ -57,24 +55,24 @@ function getGaugeColor(level: "good" | "moderate" | "critical"): string {
   }
 }
 
-/** Soil moisture 0–100%: good 40–80%, moderate 20–40 or 80–95%, critical else */
-function getMoistureLevel(value: number): "good" | "moderate" | "critical" {
-  if (value >= 40 && value <= 80) return "good";
-  if ((value >= 20 && value < 40) || (value > 80 && value <= 95)) return "moderate";
+/** Current sensor 0–5A: good < 2.0A, moderate 2.0–3.5A, critical > 3.5A */
+function getCurrentLevel(value: number): "good" | "moderate" | "critical" {
+  if (value < 2) return "good";
+  if (value <= 3.5) return "moderate";
   return "critical";
 }
 
-/** Humidity 0–100%: good 40–70%, moderate 30–40 or 70–85%, critical else */
-function getHumidityLevel(value: number): "good" | "moderate" | "critical" {
-  if (value >= 40 && value <= 70) return "good";
-  if ((value >= 30 && value < 40) || (value > 70 && value <= 85)) return "moderate";
+/** Power 0–1000W: good < 300W, moderate 300–700W, critical > 700W */
+function getPowerLevel(value: number): "good" | "moderate" | "critical" {
+  if (value < 300) return "good";
+  if (value <= 700) return "moderate";
   return "critical";
 }
 
-/** AQI 0–500: good 0–50, moderate 51–150, critical 151+ */
-function getAQILevel(value: number): "good" | "moderate" | "critical" {
-  if (value <= 50) return "good";
-  if (value <= 150) return "moderate";
+/** Energy 0–5kWh (demo range): good < 1kWh, moderate 1–3kWh, critical > 3kWh */
+function getEnergyLevel(value: number): "good" | "moderate" | "critical" {
+  if (value < 1) return "good";
+  if (value <= 3) return "moderate";
   return "critical";
 }
 
@@ -154,7 +152,11 @@ const SPARKLINE_HEIGHT = 30;
 
 function SparklineMini({ data, stroke = "var(--muted)" }: { data: number[]; stroke?: string }) {
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    // Defer state update to avoid eslint rule "setState in effect".
+    const t = window.setTimeout(() => setMounted(true), 0);
+    return () => window.clearTimeout(t);
+  }, []);
   const chartData = data.length ? data.map((v, i) => ({ i, v })) : [{ i: 0, v: 0 }];
   return (
     <div className="sparkline-wrap" style={{ width: SPARKLINE_WIDTH, height: SPARKLINE_HEIGHT }}>
@@ -170,47 +172,34 @@ function SparklineMini({ data, stroke = "var(--muted)" }: { data: number[]; stro
 /** Mock sensor data so UI always has values (no blanks) */
 function getMockSensorData(): SensorData {
   return {
-    temperature: 27.4,
-    humidity: 58,
-    moisture: 62,
-    aqi: 72,
-    uv_index: 3.2,
-    pressure: 1012,
-    co2_ppm: 418,
-    tvoc_ppb: 124,
-    pump_status: "OFF",
-    rain: 0,
-    light_lux: 340,
-    wind_speed: 2.1,
-    soil_ph: 6.8,
-    npk_n: 45,
-    npk_p: 22,
-    npk_k: 38,
-    leaf_wetness: 12,
+    voltage_v: 230,
+    current_a: 1.2,
+    power_w: 275,
+    energy_kwh: 0.45,
+    relay_status: "ON",
+    event: "",
   };
 }
 
 /** Mock chart history so graph is never empty */
 function getMockHistory(): SensorData[] {
-  const base = getMockSensorData();
   return Array.from({ length: 50 }, (_, i) => {
-    const t = 25 + Math.sin(i / 8) * 3 + (i % 5) * 0.2;
-    const h = 52 + Math.cos(i / 6) * 8 + (i % 4);
+    const powerBase = 170;
+    const wave = Math.sin(i / 6) * 90;
+    const loadPulse = i % 14 < 6 ? 220 : 0; // "load on/off" visual rhythm
+    const power = Math.max(0, powerBase + wave + loadPulse);
+    const current = power / 230;
     return {
-      ...base,
-      temperature: Math.round(t * 10) / 10,
-      humidity: Math.round(h * 10) / 10,
+      voltage_v: 230,
+      current_a: Math.round(current * 100) / 100,
+      power_w: Math.round(power * 10) / 10,
+      energy_kwh: Math.round((i * 0.07 + (Math.sin(i / 4) + 1) * 0.02) * 100) / 100,
+      relay_status: i % 14 < 6 ? "ON" : "OFF",
+      event: "",
       time: `${String(10 + Math.floor(i / 6) % 12).padStart(2, "0")}:${String((i * 2) % 60).padStart(2, "0")}`,
     };
   });
 }
-
-const MOCK_AI: AIPrediction = {
-  rain_prediction: false,
-  rain_probability_percent: 38,
-  irrigation_needed: true,
-  alert: "Clear",
-};
 
 const THEME_STORAGE_KEY = "dashboard-theme";
 const MAX_TOASTS = 3;
@@ -230,15 +219,13 @@ export default function Dashboard() {
   const [data, setData] = useState<SensorData | null>(null);
   const [history, setHistory] = useState<SensorData[]>([]);
   const [aiConnected, setAiConnected] = useState(false);
-  const [aiPrediction, setAIPrediction] = useState<AIPrediction | null>(null);
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [secondsSinceUpdate, setSecondsSinceUpdate] = useState(0);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [csvDownloading, setCsvDownloading] = useState(false);
-  const [mobileTab, setMobileTab] = useState<"soil" | "atmosphere" | "air" | "ai">("soil");
+  const [mobileTab, setMobileTab] = useState<"power" | "energy" | "control" | "prediction">("power");
   const wsRef = useRef<WebSocket | null>(null);
-  const aiIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastUpdatedAtRef = useRef<number>(Date.now());
   const toastIdRef = useRef(0);
 
@@ -266,17 +253,12 @@ export default function Dashboard() {
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
     const rows: [string, string, string, string][] = [
       ["Parameter", "Value", "Unit", "Timestamp"],
-      ["Soil Moisture", String(displayData.moisture ?? ""), "%", new Date().toISOString()],
-      ["Temperature", String(displayData.temperature ?? ""), "°C", new Date().toISOString()],
-      ["Humidity", String(displayData.humidity ?? ""), "%", new Date().toISOString()],
-      ["AQI", String(displayData.aqi ?? ""), "", new Date().toISOString()],
-      ["CO₂", String(displayData.co2_ppm ?? ""), "ppm", new Date().toISOString()],
-      ["TVOC", String(displayData.tvoc_ppb ?? ""), "ppb", new Date().toISOString()],
-      ["Pressure", String(displayData.pressure ?? ""), "hPa", new Date().toISOString()],
-      ["UV Index", String(displayData.uv_index ?? ""), "", new Date().toISOString()],
-      ["Light", String(displayData.light_lux ?? ""), "lux", new Date().toISOString()],
-      ["Wind", String(displayData.wind_speed ?? ""), "m/s", new Date().toISOString()],
-      ["Soil pH", String(displayData.soil_ph ?? ""), "", new Date().toISOString()],
+      ["Voltage", String(displayData.voltage_v ?? ""), "V", new Date().toISOString()],
+      ["Current", String(displayData.current_a ?? ""), "A", new Date().toISOString()],
+      ["Power", String(displayData.power_w ?? ""), "W", new Date().toISOString()],
+      ["Energy", String(displayData.energy_kwh ?? ""), "kWh", new Date().toISOString()],
+      ["Relay", String(displayData.relay_status ?? ""), "", new Date().toISOString()],
+      ["Event", String(displayData.event ?? ""), "", new Date().toISOString()],
     ];
     const csv = rows.map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
@@ -294,34 +276,14 @@ export default function Dashboard() {
 
   const displayData = data ?? mockData;
   const displayHistory = history.length > 0 ? history : mockHistory;
-  const displayAi = aiPrediction ?? MOCK_AI;
-
-  const rainPercent = displayAi.rain_probability_percent ?? 38;
-  const rainSentence =
-    rainPercent >= 60
-      ? "Rain likely — consider delaying irrigation"
-      : rainPercent >= 30
-        ? "Possible rain in next 6 hours"
-        : "Low chance of rain in next 6 hours";
-
-  const fetchAI = useCallback(async () => {
-    const url = getAiPredictUrl();
-    if (!url) {
-      setAIPrediction(null);
-      setAiConnected(false);
-      return;
-    }
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json: AIPrediction = await res.json();
-      setAIPrediction(json);
-      setAiConnected(true);
-    } catch (e) {
-      setAIPrediction(null);
-      setAiConnected(false);
-    }
-  }, []);
+  const predictionWindowMinutes = 30;
+  const predictionAvgPowerW = useMemo(() => {
+    const last = displayHistory.slice(-10);
+    if (!last.length) return 0;
+    const sum = last.reduce((acc, h) => acc + (h.power_w ?? 0), 0);
+    return sum / last.length;
+  }, [displayHistory]);
+  const predictedEnergyNext30mKwh = (predictionAvgPowerW * (predictionWindowMinutes / 60)) / 1000;
 
   // Last updated: increment every second
   useEffect(() => {
@@ -377,20 +339,31 @@ export default function Dashboard() {
           second: "2-digit",
         });
         lastUpdatedAtRef.current = Date.now();
+        setAiConnected(true);
         setData(parsed);
         setHistory((prev) => {
           const next = [...prev, parsed].slice(-CHART_HISTORY_LENGTH);
           return next;
         });
-        // Toast thresholds: Moisture < 20%, AQI > 150, Temp > 38°C, CO2 > 1000
-        const m = parsed.moisture ?? 0;
-        const a = parsed.aqi ?? 0;
-        const t = parsed.temperature ?? 0;
-        const c = parsed.co2_ppm ?? 0;
-        if (m < 20) addToast("Soil Moisture", `${m}%`, m < 10 ? "Critical" : "Warning");
-        if (a > 150) addToast("AQI", String(a), a > 200 ? "Critical" : "Warning");
-        if (t > 38) addToast("Temperature", `${t}°C`, t > 42 ? "Critical" : "Warning");
-        if (c > 1000) addToast("CO₂", `${c} ppm`, c > 2000 ? "Critical" : "Warning");
+
+        // Energy Guardian toast rules (simple thresholds for expo demo)
+        const currentLimitA = 2.5;
+        const powerLimitW = 600;
+        const currentA = parsed.current_a ?? 0;
+        const powerW = parsed.power_w ?? 0;
+        const event = (parsed.event ?? "").trim();
+
+        if (event) {
+          const critical = event.includes("OVER") || event.includes("TIME") || event.includes("FAIL");
+          addToast("Event", event, critical ? "Critical" : "Warning");
+        } else {
+          if (currentA > currentLimitA) {
+            addToast("Current", `${currentA.toFixed(2)} A`, currentA > currentLimitA * 1.3 ? "Critical" : "Warning");
+          }
+          if (powerW > powerLimitW) {
+            addToast("Power", `${powerW.toFixed(1)} W`, powerW > powerLimitW * 1.3 ? "Critical" : "Warning");
+          }
+        }
       } catch {
         // ignore
       }
@@ -399,20 +372,9 @@ export default function Dashboard() {
     return () => {
       ws.close();
       wsRef.current = null;
+      setAiConnected(false);
     };
   }, [addToast]);
-
-  useEffect(() => {
-    fetchAI();
-    const id = setInterval(fetchAI, 30_000);
-    aiIntervalRef.current = id;
-    return () => {
-      if (aiIntervalRef.current) clearInterval(aiIntervalRef.current);
-    };
-  }, [fetchAI]);
-
-  const aqi = displayData.aqi ?? 0;
-  const aqiCategory = getAQICategory(aqi);
 
   const sparklineLast10 = useMemo(
     () => displayHistory.slice(-SPARKLINE_LENGTH),
@@ -421,44 +383,48 @@ export default function Dashboard() {
   const getSparkData = (key: keyof SensorData) =>
     sparklineLast10.map((h) => (h[key] as number) ?? 0);
 
-  const soilCards = [
-    { label: "Soil Moisture", value: formatVal(displayData.moisture, "62", "%"), icon: Droplets, sparkKey: "moisture" as const },
-    { label: "Pump", value: displayData.pump_status ?? "OFF", icon: Zap },
-    { label: "Soil pH", value: formatVal(displayData.soil_ph, "6.8"), icon: Activity, sparkKey: "soil_ph" as const },
+  const currentLimitA = 2.5;
+  const powerLimitW = 600;
+  const currentA = displayData.current_a ?? 0;
+  const powerW = displayData.power_w ?? 0;
+
+  const autoOffStatus = currentA > currentLimitA || powerW > powerLimitW ? "AUTO-OFF Recommended" : "Within Limits";
+  const riskText = currentA > currentLimitA || powerW > powerLimitW ? "HIGH RISK" : "LOW RISK";
+
+  const powerCards = [
+    { label: "Current (A)", value: `${formatVal(displayData.current_a, "1.2", "A")}`, icon: Zap, sparkKey: "current_a" as const },
+    { label: "Power (W)", value: `${formatVal(displayData.power_w, "275", "W")}`, icon: Activity, sparkKey: "power_w" as const },
+    { label: "Voltage (V)", value: `${formatVal(displayData.voltage_v, "230", "V")}`, icon: Gauge, sparkKey: "voltage_v" as const },
+    { label: "Relay", value: displayData.relay_status ?? "OFF", icon: Zap },
+  ];
+
+  const energyCards = [
+    { label: "Energy (kWh)", value: `${formatVal(displayData.energy_kwh, "0.45", "kWh")}`, icon: Leaf, sparkKey: "energy_kwh" as const },
     {
-      label: "NPK (N/P/K)",
-      value:
-        displayData.npk_n != null && displayData.npk_p != null && displayData.npk_k != null
-          ? `${displayData.npk_n} / ${displayData.npk_p} / ${displayData.npk_k} mg/kg`
-          : "45 / 22 / 38 mg/kg",
-      icon: Leaf,
+      label: "Predicted kWh (Next 30m)",
+      value: `${predictedEnergyNext30mKwh.toFixed(2)} kWh`,
+      icon: AlertTriangle,
     },
+    { label: "Relay Status", value: displayData.relay_status ?? "OFF", icon: Zap },
+    { label: "Power Limit", value: `${powerLimitW} W`, icon: Flame },
   ];
 
-  const atmosphereCards = [
-    { label: "Temperature", value: `${formatVal(displayData.temperature, "27.4")}°C`, icon: Thermometer, sparkKey: "temperature" as const },
-    { label: "Humidity", value: formatVal(displayData.humidity, "58", "%"), icon: Droplets, sparkKey: "humidity" as const },
-    { label: "Pressure", value: `${formatVal(displayData.pressure, "1012")} hPa`, icon: Gauge, sparkKey: "pressure" as const },
-    { label: "Wind", value: `${formatVal(displayData.wind_speed, "2.1")} m/s`, icon: Wind, sparkKey: "wind_speed" as const },
+  const controlCards = [
+    { label: "Auto-Off Status", value: autoOffStatus, icon: AlertTriangle },
+    { label: "Overcurrent Risk", value: currentA > currentLimitA ? "YES" : "NO", icon: Flame },
+    { label: "Overpower Risk", value: powerW > powerLimitW ? "YES" : "NO", icon: Flame },
+    { label: "Last Event", value: (displayData.event ?? "").trim() ? (displayData.event ?? "") : "—", icon: AlertTriangle },
   ];
 
-  const airQualityCards = [
-    { label: "AQI", value: `${displayData.aqi ?? 72} (${aqiCategory})`, icon: Flame, sparkKey: "aqi" as const },
-    { label: "CO₂", value: `${formatVal(displayData.co2_ppm, "418")} ppm`, icon: Activity, sparkKey: "co2_ppm" as const },
-    { label: "TVOC", value: `${formatVal(displayData.tvoc_ppb, "124")} ppb`, icon: Flame, sparkKey: "tvoc_ppb" as const },
-    { label: "Light", value: `${formatVal(displayData.light_lux, "340")} lux`, icon: Sun, sparkKey: "light_lux" as const },
-  ];
-
-  const aiCards = [
-    { label: "Rain (next 6h)", value: `${displayAi.rain_probability_percent ?? 38}%`, icon: CloudRain },
-    { label: "Irrigate", value: displayAi.irrigation_needed ? "YES" : "NO", icon: Zap },
-    { label: "UV Index", value: formatVal(displayData.uv_index, "3.2"), icon: Sun, sparkKey: "uv_index" as const },
-    { label: "Alert", value: displayAi.alert ?? "Clear", icon: AlertTriangle },
+  const predictionCards = [
+    { label: "Energy Next 30m", value: `${predictedEnergyNext30mKwh.toFixed(2)} kWh`, icon: AlertTriangle },
+    { label: "Risk Level", value: riskText, icon: Flame },
+    { label: "If Over Limit", value: "Relay OFF + Alert", icon: Zap },
+    { label: "Demo Mode", value: "Moving Avg Prediction", icon: Activity },
   ];
 
   const sensorHealthRows = useMemo(() => {
     const d = displayData;
-    const near = (v: number, lo: number, hi: number) => v >= lo && v <= hi;
     const status = (
       v: number | undefined,
       lowOk: number,
@@ -473,48 +439,28 @@ export default function Dashboard() {
       return "Warning";
     };
     return [
-      { name: "Soil Moisture", value: d.moisture, unit: "%", status: status(d.moisture, 40, 80, 20, 95) },
-      { name: "Temperature", value: d.temperature, unit: "°C", status: status(d.temperature, 18, 35, 35, 38) },
-      { name: "Humidity", value: d.humidity, unit: "%", status: status(d.humidity, 40, 70, 30, 85) },
-      { name: "AQI", value: d.aqi, unit: "", status: status(d.aqi, 0, 50, 50, 150) },
-      { name: "CO₂", value: d.co2_ppm, unit: "ppm", status: status(d.co2_ppm, 400, 800, 800, 1000) },
-      { name: "Pressure", value: d.pressure, unit: "hPa", status: d.pressure != null ? "Online" : "Offline" },
-      { name: "UV Index", value: d.uv_index, unit: "", status: status(d.uv_index, 0, 8, 8, 11) },
-      { name: "Light", value: d.light_lux, unit: "lux", status: d.light_lux != null ? "Online" : "Offline" },
-      { name: "Wind", value: d.wind_speed, unit: "m/s", status: d.wind_speed != null ? "Online" : "Offline" },
-      { name: "Soil pH", value: d.soil_ph, unit: "", status: d.soil_ph != null ? "Online" : "Offline" },
+      { name: "Current (A)", value: d.current_a, unit: "A", status: status(d.current_a, 0, 2.5, undefined, 3.5) },
+      { name: "Voltage (V)", value: d.voltage_v, unit: "V", status: status(d.voltage_v, 210, 245, 200, 250) },
+      { name: "Power (W)", value: d.power_w, unit: "W", status: status(d.power_w, 0, 400, undefined, 650) },
+      { name: "Energy (kWh)", value: d.energy_kwh, unit: "kWh", status: status(d.energy_kwh, 0, 3, undefined, 4.5) },
     ];
   }, [displayData]);
 
   const panelSections = [
-    { title: "Soil Panel", cards: soilCards },
-    { title: "Atmosphere Panel", cards: atmosphereCards },
-    { title: "Air Quality Panel", cards: airQualityCards },
-    { title: "AI Prediction Panel", cards: aiCards },
+    { title: "Power Panel", cards: powerCards },
+    { title: "Energy Panel", cards: energyCards },
+    { title: "Control Panel", cards: controlCards },
+    { title: "Prediction Panel", cards: predictionCards },
   ];
 
   const allParams = [
-    { label: "Soil Moisture", value: `${formatVal(displayData.moisture, "62")}%` },
-    { label: "Temperature", value: `${formatVal(displayData.temperature, "27.4")}°C` },
-    { label: "Humidity", value: `${formatVal(displayData.humidity, "58")}%` },
-    { label: "AQI", value: String(displayData.aqi ?? 72) },
-    { label: "CO₂ (ppm)", value: String(displayData.co2_ppm ?? 418) },
-    { label: "TVOC (ppb)", value: formatVal(displayData.tvoc_ppb, "124") },
-    { label: "Pressure (hPa)", value: formatVal(displayData.pressure, "1012") },
-    { label: "UV Index", value: formatVal(displayData.uv_index, "3.2") },
-    { label: "Light (lux)", value: formatVal(displayData.light_lux, "340") },
-    { label: "Rain", value: displayData.rain ? "YES" : "NO" },
-    { label: "Wind", value: `${formatVal(displayData.wind_speed, "2.1")} m/s` },
-    { label: "Soil pH", value: formatVal(displayData.soil_ph, "6.8") },
-    {
-      label: "NPK",
-      value: `N${displayData.npk_n ?? 45} P${displayData.npk_p ?? 22} K${displayData.npk_k ?? 38}`,
-    },
-    { label: "Leaf Wetness", value: formatVal(displayData.leaf_wetness, "12") },
-    {
-      label: "Rain (6h)",
-      value: `${displayAi.rain_probability_percent ?? 38}%`,
-    },
+    { label: "Voltage (V)", value: `${formatVal(displayData.voltage_v, "230")} V` },
+    { label: "Current (A)", value: `${formatVal(displayData.current_a, "1.2")} A` },
+    { label: "Power (W)", value: `${formatVal(displayData.power_w, "275")} W` },
+    { label: "Energy (kWh)", value: `${formatVal(displayData.energy_kwh, "0.45")} kWh` },
+    { label: "Relay Status", value: displayData.relay_status ?? "OFF" },
+    { label: "Predicted Energy (Next 30m)", value: `${predictedEnergyNext30mKwh.toFixed(2)} kWh` },
+    { label: "Auto-Off Status", value: autoOffStatus },
   ];
 
   const lastUpdatedClass =
@@ -560,7 +506,7 @@ export default function Dashboard() {
       </div>
 
       <header className="dashboard-header">
-        <h1 className="dashboard-title">AI Smart Environmental Station</h1>
+        <h1 className="dashboard-title">Smart Energy Guardian (Auto-Off)</h1>
         <p className={`last-updated ${lastUpdatedClass}`}>
           {secondsSinceUpdate <= 10 && <span className="last-updated-dot" />}
           Last updated: {secondsSinceUpdate} second{secondsSinceUpdate !== 1 ? "s" : ""} ago
@@ -569,13 +515,13 @@ export default function Dashboard() {
 
       <section className="panel-grid panel-grid--desktop">
         {panelSections.map((section) => {
-          const sectionId = section.title.startsWith("Soil")
-            ? "soil"
-            : section.title.startsWith("Atmosphere")
-              ? "atmosphere"
-              : section.title.startsWith("Air")
-                ? "air"
-                : "ai";
+          const sectionId = section.title.startsWith("Power")
+            ? "power"
+            : section.title.startsWith("Energy")
+              ? "energy"
+              : section.title.startsWith("Control")
+                ? "control"
+                : "prediction";
           const hiddenOnMobile = mobileTab !== sectionId;
           return (
             <div
@@ -586,64 +532,41 @@ export default function Dashboard() {
               <h2 className="panel-title">{section.title}</h2>
               <div className="panel-cards">
                 {section.cards.map((c) => {
-                  if (c.label === "Soil Moisture")
+                  if (c.label === "Current (A)")
                     return (
                       <SemicircleGauge
                         key={c.label}
-                        label="Soil Moisture"
-                        value={Number(displayData.moisture ?? 62)}
-                        max={100}
-                        displaySuffix="%"
-                        level={getMoistureLevel(Number(displayData.moisture ?? 62))}
-                        icon={Droplets}
+                        label="Current (A)"
+                        value={Number(displayData.current_a ?? 0)}
+                        max={5}
+                        displaySuffix="A"
+                        level={getCurrentLevel(Number(displayData.current_a ?? 0))}
+                        icon={Zap}
                       />
                     );
-                  if (c.label === "Humidity")
+                  if (c.label === "Power (W)")
                     return (
                       <SemicircleGauge
                         key={c.label}
-                        label="Humidity"
-                        value={Number(displayData.humidity ?? 58)}
-                        max={100}
-                        displaySuffix="%"
-                        level={getHumidityLevel(Number(displayData.humidity ?? 58))}
-                        icon={Droplets}
+                        label="Power (W)"
+                        value={Number(displayData.power_w ?? 0)}
+                        max={1000}
+                        displaySuffix="W"
+                        level={getPowerLevel(Number(displayData.power_w ?? 0))}
+                        icon={Activity}
                       />
                     );
-                  if (c.label === "AQI")
+                  if (c.label === "Energy (kWh)")
                     return (
                       <SemicircleGauge
                         key={c.label}
-                        label="AQI"
-                        value={Number(displayData.aqi ?? 72)}
-                        max={500}
-                        displaySuffix=""
-                        level={getAQILevel(Number(displayData.aqi ?? 72))}
-                        icon={Flame}
+                        label="Energy (kWh)"
+                        value={Number(displayData.energy_kwh ?? 0)}
+                        max={5}
+                        displaySuffix="kWh"
+                        level={getEnergyLevel(Number(displayData.energy_kwh ?? 0))}
+                        icon={Leaf}
                       />
-                    );
-                  if (section.title === "AI Prediction Panel" && c.label === "Rain (next 6h)")
-                    return (
-                      <div key={c.label} className="panel-item panel-item--rain-bar">
-                        <div className="panel-item-label">
-                          <CloudRain className="panel-item-icon" />
-                          Rain (next 6h)
-                        </div>
-                        <div className="rain-bar-wrap">
-                          <div className="rain-bar-track">
-                            <div
-                              className="rain-bar-fill"
-                              style={{
-                                width: `${rainPercent}%`,
-                                backgroundColor:
-                                  rainPercent >= 60 ? "#ef4444" : rainPercent >= 30 ? "#eab308" : "#3b82f6",
-                              }}
-                            />
-                          </div>
-                          <p className="rain-bar-value">{rainPercent}%</p>
-                          <p className="rain-bar-sentence">{rainSentence}</p>
-                        </div>
-                      </div>
                     );
                   const sparkKey = "sparkKey" in c ? c.sparkKey : undefined;
                   return (
@@ -688,7 +611,7 @@ export default function Dashboard() {
       </section>
 
       <section className="chart-section">
-        <h2 className="chart-heading">Live Temperature & Humidity</h2>
+        <h2 className="chart-heading">Live Power (W)</h2>
         <div className="chart-wrap">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
@@ -703,17 +626,10 @@ export default function Dashboard() {
                 interval="preserveStartEnd"
               />
               <YAxis
-                yAxisId="temp"
-                stroke="#c2410c"
+                yAxisId="power"
+                stroke="#16a34a"
                 tick={{ fontSize: 11 }}
-                domain={["auto", "auto"]}
-              />
-              <YAxis
-                yAxisId="hum"
-                orientation="right"
-                stroke="#1d4ed8"
-                tick={{ fontSize: 11 }}
-                domain={[0, 100]}
+                domain={[0, 1000]}
               />
               <Tooltip
                 contentStyle={{
@@ -725,20 +641,11 @@ export default function Dashboard() {
               />
               <Legend />
               <Line
-                yAxisId="temp"
                 type="monotone"
-                dataKey="temperature"
-                name="Temperature °C"
-                stroke="#c2410c"
-                dot={false}
-                strokeWidth={2}
-              />
-              <Line
-                yAxisId="hum"
-                type="monotone"
-                dataKey="humidity"
-                name="Humidity %"
-                stroke="#1d4ed8"
+                yAxisId="power"
+                dataKey="power_w"
+                name="Power (W)"
+                stroke="#16a34a"
                 dot={false}
                 strokeWidth={2}
               />
@@ -789,31 +696,31 @@ export default function Dashboard() {
       <nav className="bottom-nav" aria-label="Panel tabs">
         <button
           type="button"
-          className={`bottom-nav-btn ${mobileTab === "soil" ? "bottom-nav-btn--active" : ""}`}
-          onClick={() => setMobileTab("soil")}
+          className={`bottom-nav-btn ${mobileTab === "power" ? "bottom-nav-btn--active" : ""}`}
+          onClick={() => setMobileTab("power")}
         >
-          Soil
+          Power
         </button>
         <button
           type="button"
-          className={`bottom-nav-btn ${mobileTab === "atmosphere" ? "bottom-nav-btn--active" : ""}`}
-          onClick={() => setMobileTab("atmosphere")}
+          className={`bottom-nav-btn ${mobileTab === "energy" ? "bottom-nav-btn--active" : ""}`}
+          onClick={() => setMobileTab("energy")}
         >
-          Atmosphere
+          Energy
         </button>
         <button
           type="button"
-          className={`bottom-nav-btn ${mobileTab === "air" ? "bottom-nav-btn--active" : ""}`}
-          onClick={() => setMobileTab("air")}
+          className={`bottom-nav-btn ${mobileTab === "control" ? "bottom-nav-btn--active" : ""}`}
+          onClick={() => setMobileTab("control")}
         >
-          Air Quality
+          Control
         </button>
         <button
           type="button"
-          className={`bottom-nav-btn ${mobileTab === "ai" ? "bottom-nav-btn--active" : ""}`}
-          onClick={() => setMobileTab("ai")}
+          className={`bottom-nav-btn ${mobileTab === "prediction" ? "bottom-nav-btn--active" : ""}`}
+          onClick={() => setMobileTab("prediction")}
         >
-          AI
+          Prediction
         </button>
       </nav>
     </main>
