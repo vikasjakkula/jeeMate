@@ -1,5 +1,16 @@
-/** Sensor payload from ESP32 (WebSocket JSON) */
+/** Sensor payload from ESP32 (WebSocket JSON).
+ *  This repo originally modeled an environmental station; Energy Guardian adds
+ *  electrical/power monitoring fields (current, voltage, power, energy, relay state).
+ */
 export interface SensorData {
+  /** Energy Guardian fields (optional; enabled by your chosen project) */
+  current_a?: number; // Amps
+  voltage_v?: number; // Volts
+  power_w?: number; // Watts
+  energy_kwh?: number; // kWh (integrated over time)
+  relay_status?: string; // e.g. "ON" | "OFF" (or any human label)
+  event?: string; // e.g. "OVER_CURRENT" | "TIME_LIMIT_REACHED"
+
   temperature?: number;
   humidity?: number;
   moisture?: number;
