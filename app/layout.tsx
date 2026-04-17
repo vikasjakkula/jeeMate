@@ -2,20 +2,18 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AI Smart Environmental Station | Helix3",
-  description: "AI-powered environmental monitoring & prediction — soil, atmosphere, air quality, and 6-hour forecasts.",
+  title: "Next.js",
+  description: "Minimal Next.js page.",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
+type RootLayoutProps = {
   children: React.ReactNode;
-}>) {
+};
+
+export default function RootLayout({ children }: RootLayoutProps) {
   return (
     <html lang="en">
-      <body className="antialiased font-classic">
-        {children}
-      </body>
+      <body>{children}</body>
     </html>
   );
 }
