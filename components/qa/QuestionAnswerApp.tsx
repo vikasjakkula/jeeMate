@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import { FieldLabel, Textarea } from "@/components/ui/Field";
 import { UploadBox, type UploadedFileItem } from "@/components/qa/UploadBox";
@@ -9,7 +10,12 @@ import { WhitePages } from "@/components/qa/WhitePages";
 type ApiResponse = { latex: string } | { error: string };
 
 function uid() {
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return `${Date.now()}-${crypto.randomUUID()}`;
+  }
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}-${Math.random()
+    .toString(16)
+    .slice(2)}`;
 }
 
 async function fileToBase64(file: File): Promise<string> {
@@ -21,6 +27,7 @@ async function fileToBase64(file: File): Promise<string> {
 }
 
 export function QuestionAnswerApp() {
+  const router = useRouter();
   const [items, setItems] = React.useState<UploadedFileItem[]>([]);
   const [questionsText, setQuestionsText] = React.useState("");
   const [model, setModel] = React.useState("gemini-1.5-flash");
@@ -41,49 +48,23 @@ export function QuestionAnswerApp() {
     setItems((prev) => prev.filter((x) => x.id !== id));
   }
 
-  async function onScanFromFirstImage() {
-    if (items.length === 0) return;
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    setIsLoading(true);
-    setError(null);
-
+  function persistAndOpenAnswer(latexOut: string) {
+    const id = uid();
+    setLatex(latexOut);
     try {
-      const first = items[0].file;
-      const base64Data = await fileToBase64(first);
-
-      const res = await fetch("/api/scan-qa", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          base64Data,
-          mimeType: first.type,
-          model: model.trim() || undefined,
-          mode: "extract_only",
-          extraInstructions:
-            "Extract only the questions. Keep them concise. Do not answer yet.",
-        }),
-        signal: controller.signal,
-      });
-
-      const data = (await res.json()) as ApiResponse;
-      if (!res.ok) {
-        const msg = "error" in data ? data.error : "Request failed";
-        throw new Error(msg);
-      }
-      if (!("latex" in data) || typeof data.latex !== "string") {
-        throw new Error("Unexpected API response.");
-      }
-
-      // Put extracted questions into the editable text area (still LaTeX-only).
-      setQuestionsText(data.latex);
-    } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") return;
-      setError(e instanceof Error ? e.message : "Unknown error");
-    } finally {
-      setIsLoading(false);
+      localStorage.setItem(
+        `answers:${id}`,
+        JSON.stringify({
+          id,
+          latex: latexOut,
+          createdAt: Date.now(),
+          model: model.trim() || "gemini-1.5-flash",
+        })
+      );
+    } catch {
+      // ignore storage errors; still navigate.
     }
+    router.push(`/answers/${encodeURIComponent(id)}`);
   }
 
   async function onGenerateAnswers() {
@@ -108,7 +89,7 @@ export function QuestionAnswerApp() {
             model: model.trim() || undefined,
             mode: "extract_and_answer",
             extraInstructions:
-              "Answer in LaTeX only. Prefer display blocks \\[ ... \\]. No prose.",
+              "Answer in LaTeX only.\n- Use ONLY display math blocks: \\[ ... \\]\n- Use plain newlines (\\n)\n- No prose, no markdown.",
           }),
           signal: controller.signal,
         });
@@ -120,7 +101,7 @@ export function QuestionAnswerApp() {
         if (!("latex" in data) || typeof data.latex !== "string") {
           throw new Error("Unexpected API response.");
         }
-        setLatex(data.latex);
+        persistAndOpenAnswer(data.latex);
         return;
       }
 
@@ -131,7 +112,7 @@ export function QuestionAnswerApp() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          input: `Answer these questions in LaTeX-only:\n\n${trimmed}`,
+          input: `Answer these questions in LaTeX-only.\nUse ONLY display blocks: \\[ ... \\].\nNo prose.\n\n${trimmed}`,
           model: model.trim() || undefined,
         }),
         signal: controller.signal,
@@ -144,7 +125,7 @@ export function QuestionAnswerApp() {
       if (!("latex" in data) || typeof data.latex !== "string") {
         throw new Error("Unexpected API response.");
       }
-      setLatex(data.latex);
+      persistAndOpenAnswer(data.latex);
     } catch (e) {
       if (e instanceof DOMException && e.name === "AbortError") return;
       setLatex("");
@@ -202,13 +183,6 @@ export function QuestionAnswerApp() {
               </div>
 
               <div className="qaButtons">
-                <Button
-                  variant="secondary"
-                  onClick={onScanFromFirstImage}
-                  disabled={isLoading || items.length === 0}
-                >
-                  Scan questions
-                </Button>
                 <Button onClick={onGenerateAnswers} disabled={isLoading}>
                   Generate answers (LaTeX)
                 </Button>
