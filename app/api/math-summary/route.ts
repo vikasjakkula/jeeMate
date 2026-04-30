@@ -3,7 +3,6 @@ import { generateMathSummaryLatexJson } from "@/lib/geminiFetch";
 
 type RequestBody = {
   input?: string;
-  model?: string;
 };
 
 export async function POST(req: Request) {
@@ -31,7 +30,6 @@ export async function POST(req: Request) {
   try {
     const data = await generateMathSummaryLatexJson({
       input,
-      model: body?.model,
       signal: req.signal,
     });
     return NextResponse.json(data);

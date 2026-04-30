@@ -4,7 +4,6 @@ import { generateLatexFromQuestionImage } from "@/lib/geminiFetch";
 type RequestBody = {
   base64Data?: string;
   mimeType?: string;
-  model?: string;
   mode?: "extract_only" | "extract_and_answer";
   extraInstructions?: string;
 };
@@ -41,7 +40,6 @@ export async function POST(req: Request) {
     const data = await generateLatexFromQuestionImage({
       base64Data,
       mimeType,
-      model: body?.model,
       mode,
       extraInstructions: body?.extraInstructions,
       signal: req.signal,

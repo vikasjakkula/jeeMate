@@ -30,7 +30,6 @@ export function QuestionAnswerApp() {
   const router = useRouter();
   const [items, setItems] = React.useState<UploadedFileItem[]>([]);
   const [questionsText, setQuestionsText] = React.useState("");
-  const [model, setModel] = React.useState("gemini-1.5-flash");
   const [latex, setLatex] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [isLoading, setIsLoading] = React.useState(false);
@@ -58,7 +57,6 @@ export function QuestionAnswerApp() {
           id,
           latex: latexOut,
           createdAt: Date.now(),
-          model: model.trim() || "gemini-1.5-flash",
         })
       );
     } catch {
@@ -86,7 +84,6 @@ export function QuestionAnswerApp() {
           body: JSON.stringify({
             base64Data,
             mimeType: first.type,
-            model: model.trim() || undefined,
             mode: "extract_and_answer",
             extraInstructions:
               "Answer in LaTeX only.\n- Use ONLY display math blocks: \\[ ... \\]\n- Use plain newlines (\\n)\n- No prose, no markdown.",
@@ -113,7 +110,6 @@ export function QuestionAnswerApp() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           input: `Answer these questions in LaTeX-only.\nUse ONLY display blocks: \\[ ... \\].\nNo prose.\n\n${trimmed}`,
-          model: model.trim() || undefined,
         }),
         signal: controller.signal,
       });
@@ -137,11 +133,6 @@ export function QuestionAnswerApp() {
 
   function onCancel() {
     abortRef.current?.abort();
-  }
-
-  function onCopy() {
-    if (!latex) return;
-    void navigator.clipboard.writeText(latex);
   }
 
   return (
@@ -168,20 +159,6 @@ export function QuestionAnswerApp() {
             <UploadBox items={items} onAddFiles={onAddFiles} onRemove={onRemove} />
 
             <div className="qaControls">
-              <div className="qaModelRow">
-                <FieldLabel htmlFor="qaModel">Model</FieldLabel>
-                <input
-                  id="qaModel"
-                  className="input"
-                  value={model}
-                  onChange={(e) => setModel(e.target.value)}
-                  placeholder="gemini-1.5-flash"
-                  spellCheck={false}
-                  autoCapitalize="none"
-                  autoCorrect="off"
-                />
-              </div>
-
               <div className="qaButtons">
                 <Button onClick={onGenerateAnswers} disabled={isLoading}>
                   Generate answers (LaTeX)
@@ -192,13 +169,6 @@ export function QuestionAnswerApp() {
                   disabled={!isLoading}
                 >
                   Cancel
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={onCopy}
-                  disabled={isLoading || latex.length === 0}
-                >
-                  Copy LaTeX
                 </Button>
               </div>
 
