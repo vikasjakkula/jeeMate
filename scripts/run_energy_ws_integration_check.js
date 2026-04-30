@@ -9,6 +9,7 @@
  *   node scripts/energy_ws_sim_server.js
  */
 
+/* eslint-disable @typescript-eslint/no-require-imports */
 const WebSocket = require("ws");
 
 const WS_URL = process.env.WS_URL || "ws://localhost:8080/ws";

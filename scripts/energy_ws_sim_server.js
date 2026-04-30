@@ -11,6 +11,7 @@
  * - after OVER_LIMIT_HOLD_MS, simulator emits OVER_CURRENT event and turns relay OFF
  */
 
+/* eslint-disable @typescript-eslint/no-require-imports */
 const WebSocket = require("ws");
 
 const PORT = process.env.PORT ? Number(process.env.PORT) : 8080;
