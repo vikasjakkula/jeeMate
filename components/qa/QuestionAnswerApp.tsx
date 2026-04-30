@@ -1,0 +1,257 @@
+"use client";
+
+import * as React from "react";
+import { Button } from "@/components/ui/Button";
+import { FieldLabel, Textarea } from "@/components/ui/Field";
+import { UploadBox, type UploadedFileItem } from "@/components/qa/UploadBox";
+import { WhitePages } from "@/components/qa/WhitePages";
+
+type ApiResponse = { latex: string } | { error: string };
+
+function uid() {
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+async function fileToBase64(file: File): Promise<string> {
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
+export function QuestionAnswerApp() {
+  const [items, setItems] = React.useState<UploadedFileItem[]>([]);
+  const [questionsText, setQuestionsText] = React.useState("");
+  const [model, setModel] = React.useState("gemini-1.5-flash");
+  const [latex, setLatex] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const [isLoading, setIsLoading] = React.useState(false);
+  const abortRef = React.useRef<AbortController | null>(null);
+
+  function onAddFiles(files: FileList | File[]) {
+    const arr = Array.from(files);
+    const next: UploadedFileItem[] = arr
+      .filter((f) => /^image\/(png|jpeg|webp)$/.test(f.type))
+      .map((file) => ({ id: uid(), file, progress: 100 }));
+    setItems((prev) => [...next, ...prev].slice(0, 10));
+  }
+
+  function onRemove(id: string) {
+    setItems((prev) => prev.filter((x) => x.id !== id));
+  }
+
+  async function onScanFromFirstImage() {
+    if (items.length === 0) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const first = items[0].file;
+      const base64Data = await fileToBase64(first);
+
+      const res = await fetch("/api/scan-qa", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          base64Data,
+          mimeType: first.type,
+          model: model.trim() || undefined,
+          mode: "extract_only",
+          extraInstructions:
+            "Extract only the questions. Keep them concise. Do not answer yet.",
+        }),
+        signal: controller.signal,
+      });
+
+      const data = (await res.json()) as ApiResponse;
+      if (!res.ok) {
+        const msg = "error" in data ? data.error : "Request failed";
+        throw new Error(msg);
+      }
+      if (!("latex" in data) || typeof data.latex !== "string") {
+        throw new Error("Unexpected API response.");
+      }
+
+      // Put extracted questions into the editable text area (still LaTeX-only).
+      setQuestionsText(data.latex);
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      setError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function onGenerateAnswers() {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      // Prefer image if present; otherwise fall back to text-only route.
+      if (items.length > 0) {
+        const first = items[0].file;
+        const base64Data = await fileToBase64(first);
+        const res = await fetch("/api/scan-qa", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            base64Data,
+            mimeType: first.type,
+            model: model.trim() || undefined,
+            mode: "extract_and_answer",
+            extraInstructions:
+              "Answer in LaTeX only. Prefer display blocks \\[ ... \\]. No prose.",
+          }),
+          signal: controller.signal,
+        });
+        const data = (await res.json()) as ApiResponse;
+        if (!res.ok) {
+          const msg = "error" in data ? data.error : "Request failed";
+          throw new Error(msg);
+        }
+        if (!("latex" in data) || typeof data.latex !== "string") {
+          throw new Error("Unexpected API response.");
+        }
+        setLatex(data.latex);
+        return;
+      }
+
+      const trimmed = questionsText.trim();
+      if (!trimmed) throw new Error("Add questions (or upload an image) first.");
+
+      const res = await fetch("/api/math-summary", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          input: `Answer these questions in LaTeX-only:\n\n${trimmed}`,
+          model: model.trim() || undefined,
+        }),
+        signal: controller.signal,
+      });
+      const data = (await res.json()) as ApiResponse;
+      if (!res.ok) {
+        const msg = "error" in data ? data.error : "Request failed";
+        throw new Error(msg);
+      }
+      if (!("latex" in data) || typeof data.latex !== "string") {
+        throw new Error("Unexpected API response.");
+      }
+      setLatex(data.latex);
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      setLatex("");
+      setError(e instanceof Error ? e.message : "Unknown error");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  function onCancel() {
+    abortRef.current?.abort();
+  }
+
+  function onCopy() {
+    if (!latex) return;
+    void navigator.clipboard.writeText(latex);
+  }
+
+  return (
+    <div className="container containerWide">
+      <div className="appShell">
+        <header className="header headerTight">
+          <div className="headerInner">
+            <div className="headerLeft">
+              <h1>Question → Answer (LaTeX only)</h1>
+              <p>Upload questions, scan, then generate LaTeX on white pages.</p>
+            </div>
+            <div className="headerRight">
+              <div className="statusBadge">
+                <span className={`dot ${isLoading ? "dot-warn" : "dot-ok"}`} />
+                {isLoading ? "Working…" : "Ready"}
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <main className="qaLayout">
+          <section className="card qaCard">
+            <div className="sectionTitle">Upload</div>
+            <UploadBox items={items} onAddFiles={onAddFiles} onRemove={onRemove} />
+
+            <div className="qaControls">
+              <div className="qaModelRow">
+                <FieldLabel htmlFor="qaModel">Model</FieldLabel>
+                <input
+                  id="qaModel"
+                  className="input"
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  placeholder="gemini-1.5-flash"
+                  spellCheck={false}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                />
+              </div>
+
+              <div className="qaButtons">
+                <Button
+                  variant="secondary"
+                  onClick={onScanFromFirstImage}
+                  disabled={isLoading || items.length === 0}
+                >
+                  Scan questions
+                </Button>
+                <Button onClick={onGenerateAnswers} disabled={isLoading}>
+                  Generate answers (LaTeX)
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={onCancel}
+                  disabled={!isLoading}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={onCopy}
+                  disabled={isLoading || latex.length === 0}
+                >
+                  Copy LaTeX
+                </Button>
+              </div>
+
+              {error ? <div className="qaError">{error}</div> : null}
+            </div>
+
+            <div className="qaText">
+              <FieldLabel htmlFor="questionsText">
+                Questions (editable, LaTeX-friendly)
+              </FieldLabel>
+              <Textarea
+                id="questionsText"
+                value={questionsText}
+                onChange={(e) => setQuestionsText(e.target.value)}
+                placeholder={
+                  "Type questions here (optional if you upload an image).\nExample:\n1) Solve 2x+5=17\n2) Differentiate x^2+3x"
+                }
+              />
+            </div>
+          </section>
+
+          <section className="qaPages">
+            <WhitePages latex={latex} />
+          </section>
+        </main>
+      </div>
+    </div>
+  );
+}
+

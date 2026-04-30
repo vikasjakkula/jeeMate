@@ -1,5 +1,5 @@
-import { MathSummaryApp } from "@/components/math-summary/MathSummaryApp";
+import { QuestionAnswerApp } from "@/components/qa/QuestionAnswerApp";
 
 export default function Home() {
-  return <MathSummaryApp />;
+  return <QuestionAnswerApp />;
 }

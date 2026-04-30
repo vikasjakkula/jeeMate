@@ -35,6 +35,10 @@
     padding: 2rem 1rem;
   }
 
+  .containerWide {
+    max-width: 1100px;
+  }
+
   .appShell {
     width: 100%;
     display: flex;
@@ -46,6 +50,10 @@
   .header {
     text-align: center;
     margin-bottom: 2.5rem;
+  }
+
+  .headerTight {
+    margin-bottom: 0.5rem;
   }
 
   .headerInner {
@@ -88,6 +96,277 @@
     border: 1px solid #334155;
     margin-bottom: 2rem;
     backdrop-filter: blur(10px);
+  }
+
+  .qaLayout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
+    align-items: start;
+  }
+
+  .qaCard {
+    margin-bottom: 0;
+  }
+
+  .qaPages {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .qaControls {
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .qaModelRow {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .qaButtons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .qaText {
+    margin-top: 14px;
+  }
+
+  .qaError {
+    color: #fecaca;
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    border-radius: 12px;
+    padding: 10px 12px;
+    font-size: 0.95rem;
+  }
+
+  /* Upload UI (match screenshot) */
+  .uploadShell {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+
+  .uploadDrop {
+    border: 3px dashed rgba(96, 165, 250, 0.55);
+    border-radius: 14px;
+    background: rgba(15, 23, 42, 0.35);
+    padding: 26px 18px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+    justify-content: center;
+    min-height: 260px;
+    transition: border-color 150ms ease, background-color 150ms ease;
+  }
+
+  .uploadDrop--active {
+    border-color: rgba(59, 130, 246, 0.95);
+    background: rgba(59, 130, 246, 0.08);
+  }
+
+  .uploadIcon {
+    width: 54px;
+    height: 54px;
+    border-radius: 16px;
+    display: grid;
+    place-items: center;
+    color: #60a5fa;
+    border: 2px solid rgba(96, 165, 250, 0.35);
+    background: rgba(96, 165, 250, 0.06);
+    font-size: 28px;
+    line-height: 1;
+  }
+
+  .uploadBrowse {
+    border: none;
+    background: #1d9bf0;
+    color: white;
+    padding: 10px 26px;
+    border-radius: 9999px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 8px 18px rgba(29, 155, 240, 0.25);
+    transition: transform 120ms ease, box-shadow 120ms ease;
+  }
+
+  .uploadBrowse:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 22px rgba(29, 155, 240, 0.35);
+  }
+
+  .uploadHint {
+    color: rgba(148, 163, 184, 0.7);
+    font-size: 1.05rem;
+  }
+
+  .uploadSupport {
+    color: rgba(226, 232, 240, 0.9);
+    font-size: 0.95rem;
+  }
+
+  .uploadSupportStar {
+    color: #f87171;
+    margin-right: 6px;
+    font-weight: 800;
+  }
+
+  .uploadInput {
+    display: none;
+  }
+
+  .uploadList {
+    border-radius: 14px;
+    background: rgba(15, 23, 42, 0.35);
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    padding: 14px 14px;
+  }
+
+  .uploadListTitle {
+    font-weight: 800;
+    color: #e5e7eb;
+    margin-bottom: 10px;
+  }
+
+  .uploadItems {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .uploadEmpty {
+    color: rgba(148, 163, 184, 0.9);
+    font-size: 0.95rem;
+    padding: 8px 6px;
+  }
+
+  .uploadItem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    background: rgba(2, 6, 23, 0.35);
+  }
+
+  .uploadItemLeft {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .uploadFileIcon {
+    width: 30px;
+    height: 30px;
+    display: grid;
+    place-items: center;
+    border-radius: 8px;
+    background: rgba(96, 165, 250, 0.08);
+    border: 1px solid rgba(96, 165, 250, 0.2);
+    font-size: 16px;
+  }
+
+  .uploadFileName {
+    color: #e2e8f0;
+    font-weight: 700;
+    font-size: 0.95rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 260px;
+  }
+
+  .uploadItemRight {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .uploadProgress {
+    width: 90px;
+    height: 6px;
+    border-radius: 9999px;
+    background: rgba(148, 163, 184, 0.2);
+    overflow: hidden;
+  }
+
+  .uploadProgressBar {
+    height: 100%;
+    background: #1d9bf0;
+  }
+
+  .uploadProgressText {
+    color: rgba(148, 163, 184, 0.95);
+    font-size: 0.9rem;
+    width: 42px;
+    text-align: right;
+  }
+
+  .uploadDelete {
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: #f87171;
+    font-size: 18px;
+    padding: 6px 8px;
+    border-radius: 10px;
+  }
+
+  .uploadDelete:hover {
+    background: rgba(239, 68, 68, 0.12);
+  }
+
+  /* White pages output */
+  .pagesWrap {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .pageSheet {
+    background: #ffffff;
+    color: #0f172a;
+    border-radius: 10px;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    overflow: hidden;
+  }
+
+  .pageBody {
+    padding: 26px 22px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+      "Liberation Mono", "Courier New", monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+    min-height: 220px;
+    line-height: 1.55;
+  }
+
+  .pageMuted {
+    color: rgba(15, 23, 42, 0.55);
+  }
+
+  .pageFooter {
+    padding: 10px 14px;
+    font-size: 0.9rem;
+    color: rgba(15, 23, 42, 0.5);
+    border-top: 1px solid rgba(15, 23, 42, 0.08);
+    text-align: right;
+    background: rgba(15, 23, 42, 0.02);
   }
 
   .sectionTitle {
@@ -383,5 +662,14 @@
     .grid {
       grid-template-columns: 1fr 1fr;
       align-items: start;
+    }
+
+    .qaLayout {
+      grid-template-columns: 420px 1fr;
+    }
+
+    .uploadShell {
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
     }
   }

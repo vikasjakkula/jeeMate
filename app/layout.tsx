@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Math Summary (LaTeX JSON)",
-  description: "Generate LaTeX-only math summaries via Gemini JSON schema.",
+  title: "Question → Answer (LaTeX only)",
+  description: "Upload questions, scan with Gemini, and generate LaTeX-only answers.",
 };
 
 type RootLayoutProps = {
