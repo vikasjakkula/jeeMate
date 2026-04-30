@@ -8,6 +8,9 @@ type GeminiGenerateContentRequest = {
     >;
   }>;
   generationConfig?: {
+    // Latest docs use camelCase in REST generationConfig; keep snake_case optional for compatibility.
+    responseMimeType?: "application/json" | string;
+    responseJsonSchema?: unknown;
     response_mime_type?: "application/json" | string;
     response_json_schema?: unknown;
     temperature?: number;
@@ -74,10 +77,10 @@ export async function generateMathSummaryLatexJson(params: {
   const apiKey = requireEnv("GEMINI_API_KEY");
   const model = params.model ?? process.env.GEMINI_MODEL ?? "gemini-1.5-flash";
 
-  // Per docs, the generateContent endpoint is /v1beta/models/{MODEL_ID}:generateContent
+  // Latest docs: send API key via x-goog-api-key header.
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     model
-  )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  )}:generateContent`;
 
   const requestBody: GeminiGenerateContentRequest = {
     contents: [
@@ -86,8 +89,8 @@ export async function generateMathSummaryLatexJson(params: {
       },
     ],
     generationConfig: {
-      response_mime_type: "application/json",
-      response_json_schema: {
+      responseMimeType: "application/json",
+      responseJsonSchema: {
         type: "object",
         additionalProperties: false,
         properties: {
@@ -107,7 +110,7 @@ export async function generateMathSummaryLatexJson(params: {
 
   const res = await fetch(url, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
     body: JSON.stringify(requestBody),
     signal: params.signal,
   });
@@ -153,7 +156,7 @@ export async function generateLatexFromQuestionImage(params: {
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     model
-  )}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  )}:generateContent`;
 
   const requestBody: GeminiGenerateContentRequest = {
     contents: [
@@ -165,8 +168,8 @@ export async function generateLatexFromQuestionImage(params: {
       },
     ],
     generationConfig: {
-      response_mime_type: "application/json",
-      response_json_schema: {
+      responseMimeType: "application/json",
+      responseJsonSchema: {
         type: "object",
         additionalProperties: false,
         properties: {
@@ -182,7 +185,7 @@ export async function generateLatexFromQuestionImage(params: {
 
   const res = await fetch(url, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", "x-goog-api-key": apiKey },
     body: JSON.stringify(requestBody),
     signal: params.signal,
   });
