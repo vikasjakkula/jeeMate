@@ -21,8 +21,12 @@ function newChatId() {
 }
 
 function getChatIdFromHash() {
-  const m = window.location.hash.match(/^#\/chat\/([a-f0-9-]+)/i);
+  const m = window.location.hash.match(/^#\/app\/([a-f0-9-]+)/i);
   return m ? m[1] : null;
+}
+
+function goHome() {
+  window.history.pushState(null, '', window.location.pathname + window.location.search);
 }
 
 function loadChatsIndex() {
@@ -49,6 +53,46 @@ function deriveTitle(messages) {
   const t = (firstUser.text || '').trim();
   if (t) return t.length > 40 ? t.slice(0, 40) + '…' : t;
   return firstUser.image ? 'Image question' : 'New chat';
+}
+
+// ── Streak persistence ────────────────────────────────────────────────────────
+const STREAK_KEY = 'jeemate:streak';
+
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function dayDiff(from, to) {
+  const a = new Date(from + 'T00:00:00');
+  const b = new Date(to + 'T00:00:00');
+  return Math.round((b - a) / 86400000);
+}
+
+function loadStreak() {
+  try {
+    const raw = localStorage.getItem(STREAK_KEY);
+    if (!raw) return { current: 0, longest: 0, lastActiveDate: null };
+    const s = JSON.parse(raw);
+    if (s.lastActiveDate && dayDiff(s.lastActiveDate, todayStr()) > 1) {
+      s.current = 0; // streak broken — last activity older than yesterday
+    }
+    return s;
+  } catch {
+    return { current: 0, longest: 0, lastActiveDate: null };
+  }
+}
+
+function bumpStreak() {
+  const today = todayStr();
+  const s = loadStreak();
+  if (s.lastActiveDate === today) return s; // already counted today
+  const diff = s.lastActiveDate ? dayDiff(s.lastActiveDate, today) : null;
+  s.current = diff === 1 ? (s.current || 0) + 1 : 1;
+  s.lastActiveDate = today;
+  if (s.current > (s.longest || 0)) s.longest = s.current;
+  try { localStorage.setItem(STREAK_KEY, JSON.stringify(s)); } catch {}
+  return s;
 }
 
 // ── KaTeX math renderer ───────────────────────────────────────────────────────
@@ -141,7 +185,7 @@ function MathRenderer({ text }) {
 
 // ── Solution card ─────────────────────────────────────────────────────────────
 function SolutionCard({ data }) {
-  const { solution, model, meta } = data;
+  const { solution } = data;
 
   return (
     <div className="sol-card">
@@ -149,10 +193,6 @@ function SolutionCard({ data }) {
       <div className="sol-meta-row">
         {solution.subject && <span className="sol-chip chip-subject">{solution.subject}</span>}
         {solution.topic   && <span className="sol-chip chip-topic">{solution.topic}</span>}
-        <span className="sol-chip chip-model">{model}</span>
-        {meta?.chunks_used > 0 && (
-          <span className="sol-chip chip-notes">{meta.chunks_used} notes</span>
-        )}
       </div>
 
       {/* Extracted question */}
@@ -261,6 +301,10 @@ function ResponseArea({ messages, bottomRef }) {
     <div className="response-area">
       {messages.length === 0 ? (
         <div className="empty-state">
+          <div className="empty-hero">
+            <h1 className="hero-title">Generate Complex Steps Using AI</h1>
+            <p className="hero-sub">Upload questions · get hints · instant AI step-by-step solutions</p>
+          </div>
           <div className="empty-grid">
             {[
               'Solve: ∫x·eˣ dx using integration by parts',
@@ -396,6 +440,29 @@ function InputBar({ onSend, disabled }) {
   );
 }
 
+// ── Streak badge ──────────────────────────────────────────────────────────────
+function StreakBadge({ streak }) {
+  const count = streak?.current || 0;
+  const active = count > 0;
+  const isTodayActive = streak?.lastActiveDate === todayStr();
+  const title = !active
+    ? 'Start your streak — ask your first question today!'
+    : isTodayActive
+      ? `${count}-day streak — keep it going tomorrow! Longest: ${streak.longest}`
+      : `${count}-day streak — solve one today to keep it alive!`;
+
+  return (
+    <div
+      className={`streak${active ? ' streak-active' : ''}${isTodayActive ? ' streak-today' : ''}`}
+      title={title}
+      aria-label={title}
+    >
+      <img src="/assets/fire-svgrepo-com.svg" alt="" className="streak-icon" />
+      <span className="streak-count">{count}</span>
+    </div>
+  );
+}
+
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 function Sidebar({ chats, activeId, onNewChat, onSelectChat, onDeleteChat, open, onClose }) {
   return (
@@ -444,31 +511,29 @@ function Sidebar({ chats, activeId, onNewChat, onSelectChat, onDeleteChat, open,
 
 // ── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
-  // chatId is the UUID embedded in the URL hash (#/chat/<uuid>)
-  const [chatId, setChatId] = useState(() => {
-    const fromUrl = getChatIdFromHash();
-    if (fromUrl) return fromUrl;
-    const fresh = newChatId();
-    window.history.replaceState(null, '', `#/chat/${fresh}`);
-    return fresh;
-  });
+  // chatId is the UUID embedded in the URL hash (#/app/<uuid>), or null on the home page
+  const [chatId, setChatId] = useState(() => getChatIdFromHash());
   const [chats, setChats]       = useState(() => loadChatsIndex());
-  const [messages, setMessages] = useState(() => loadChatMessages(chatId));
+  const [messages, setMessages] = useState(() => {
+    const id = getChatIdFromHash();
+    return id ? loadChatMessages(id) : [];
+  });
   const [loading, setLoading]   = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [streak, setStreak]     = useState(() => loadStreak());
   const bottomRef = useRef(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  // React to back/forward navigation between chats
+  // React to back/forward navigation between chats (and back to home)
   useEffect(() => {
     function onHash() {
       const id = getChatIdFromHash();
-      if (id && id !== chatId) {
+      if (id !== chatId) {
         setChatId(id);
-        setMessages(loadChatMessages(id));
+        setMessages(id ? loadChatMessages(id) : []);
       }
     }
     window.addEventListener('hashchange', onHash);
@@ -477,7 +542,7 @@ export default function App() {
 
   // Persist messages + bump this chat to the top of the index whenever it changes
   useEffect(() => {
-    if (messages.length === 0) return;
+    if (!chatId || messages.length === 0) return;
     saveChatMessages(chatId, messages);
     const title = deriveTitle(messages);
     setChats((prev) => {
@@ -490,16 +555,15 @@ export default function App() {
 
   const switchToChat = useCallback((id) => {
     if (id === chatId) { setSidebarOpen(false); return; }
-    window.history.pushState(null, '', `#/chat/${id}`);
+    window.history.pushState(null, '', `#/app/${id}`);
     setChatId(id);
     setMessages(loadChatMessages(id));
     setSidebarOpen(false);
   }, [chatId]);
 
   const handleNewChat = useCallback(() => {
-    const id = newChatId();
-    window.history.pushState(null, '', `#/chat/${id}`);
-    setChatId(id);
+    goHome();
+    setChatId(null);
     setMessages([]);
     setSidebarOpen(false);
   }, []);
@@ -515,8 +579,15 @@ export default function App() {
   }, [chatId, handleNewChat]);
 
   async function handleSend({ text, image }) {
-    // Push user bubble immediately
+    // First send on the home page: mint a UUID and slide into #/app/<uuid>
+    if (!chatId) {
+      const id = newChatId();
+      window.history.replaceState(null, '', `#/app/${id}`);
+      setChatId(id);
+    }
+    // Push user bubble immediately and bump today's streak
     setMessages(prev => [...prev, { role: 'user', text: text || '', image: image || null }]);
+    setStreak(bumpStreak());
     setLoading(true);
 
     try {
@@ -578,22 +649,17 @@ export default function App() {
               </svg>
               JEEmate
             </div>
-            <div className="exam-tags">
-              <span className="tag">JEE</span>
-              <span className="tag">EAMCET</span>
-              <span className="tag">CBSE</span>
+            <div className="top-right">
+              <StreakBadge streak={streak} />
+              <div className="exam-tags">
+                <span className="tag">JEE</span>
+                <span className="tag">EAMCET</span>
+                <span className="tag">CBSE</span>
+              </div>
             </div>
           </header>
 
-          {/* ── Hero ── */}
-          <section className="hero">
-            <h1 className="hero-title">Generate Complex Steps Using AI</h1>
-            <p className="hero-sub">Upload questions · get hints · instant AI step-by-step solutions</p>
-          </section>
-
-          <div className="divider" />
-
-          {/* ── Messages ── */}
+          {/* ── Messages (hero shown inside empty-state) ── */}
           <ResponseArea messages={messages} bottomRef={bottomRef} />
 
           {/* ── Loading ── */}
