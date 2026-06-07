@@ -295,8 +295,18 @@ function ErrorBubble({ text }) {
   );
 }
 
+// ── Suggested JEE questions shown on the empty starting page ──────────────────
+const SUGGESTIONS = [
+  { subject: 'Maths',     q: 'Evaluate the definite integral ∫₀^(π/2) sin²x / (sin x + cos x) dx using the king property' },
+  { subject: 'Maths',     q: 'Find the sum to n terms of the series 1·2 + 2·3 + 3·4 + … + n(n+1)' },
+  { subject: 'Maths',     q: 'How many distinct arrangements of the letters of MISSISSIPPI are possible such that all four S\'s appear together?' },
+  { subject: 'Physics',   q: 'A particle is projected at 20 m/s at 60° above the horizontal. Find its maximum height, time of flight and range (take g = 10 m/s²)' },
+  { subject: 'Physics',   q: 'Five identical resistors of resistance R are connected in a Wheatstone-bridge configuration. Find the equivalent resistance between the input terminals' },
+  { subject: 'Chemistry', q: 'Calculate the pH of a 0.1 M acetic acid solution given Ka = 1.8 × 10⁻⁵' },
+];
+
 // ── Response area ─────────────────────────────────────────────────────────────
-function ResponseArea({ messages, bottomRef }) {
+function ResponseArea({ messages, bottomRef, onPickSuggestion }) {
   return (
     <div className="response-area">
       {messages.length === 0 ? (
@@ -306,13 +316,16 @@ function ResponseArea({ messages, bottomRef }) {
             <p className="hero-sub">Upload questions · get hints · instant AI step-by-step solutions</p>
           </div>
           <div className="empty-grid">
-            {[
-              'Solve: ∫x·eˣ dx using integration by parts',
-              'Projectile motion — derive range formula',
-              'Chemical bonding: ionic vs covalent',
-              'Probability: Bayes theorem with example',
-            ].map((s, i) => (
-              <div key={i} className="suggestion-chip">{s}</div>
+            {SUGGESTIONS.map((s, i) => (
+              <button
+                key={i}
+                type="button"
+                className="suggestion-card"
+                onClick={() => onPickSuggestion?.(s.q)}
+              >
+                <span className={`sub-tag sub-${s.subject.toLowerCase()}`}>{s.subject}</span>
+                <span className="sub-q">{s.q}</span>
+              </button>
             ))}
           </div>
         </div>
@@ -332,7 +345,7 @@ function ResponseArea({ messages, bottomRef }) {
 }
 
 // ── ChatGPT-style input bar ───────────────────────────────────────────────────
-function InputBar({ onSend, disabled }) {
+function InputBar({ onSend, disabled, prefill, onPrefillConsumed }) {
   const [text, setText] = useState('');
   const [image, setImage] = useState(null);
   const fileRef = useRef(null);
@@ -344,6 +357,14 @@ function InputBar({ onSend, disabled }) {
     ta.style.height = 'auto';
     ta.style.height = Math.min(ta.scrollHeight, 110) + 'px';
   }, [text]);
+
+  // Fill the textbox when a suggestion card is clicked
+  useEffect(() => {
+    if (!prefill) return;
+    setText(prefill);
+    onPrefillConsumed?.();
+    taRef.current?.focus();
+  }, [prefill, onPrefillConsumed]);
 
   // With image: can send even without text (image-only).
   // Without image: require ≥10 chars so backend doesn't reject.
@@ -521,6 +542,7 @@ export default function App() {
   const [loading, setLoading]   = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [streak, setStreak]     = useState(() => loadStreak());
+  const [prefill, setPrefill]   = useState(null);
   const bottomRef = useRef(null);
 
   useEffect(() => {
@@ -660,7 +682,11 @@ export default function App() {
           </header>
 
           {/* ── Messages (hero shown inside empty-state) ── */}
-          <ResponseArea messages={messages} bottomRef={bottomRef} />
+          <ResponseArea
+            messages={messages}
+            bottomRef={bottomRef}
+            onPickSuggestion={setPrefill}
+          />
 
           {/* ── Loading ── */}
           {loading && (
@@ -674,7 +700,13 @@ export default function App() {
           )}
 
           {/* ── Input ── */}
-          <InputBar key={chatId} onSend={handleSend} disabled={loading} />
+          <InputBar
+            key={chatId}
+            onSend={handleSend}
+            disabled={loading}
+            prefill={prefill}
+            onPrefillConsumed={() => setPrefill(null)}
+          />
         </div>
       </div>
     </div>
