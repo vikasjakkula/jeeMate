@@ -484,6 +484,65 @@ function StreakBadge({ streak }) {
   );
 }
 
+// ── Install button (PWA "Add to Home Screen") ─────────────────────────────────
+function InstallButton() {
+  const [deferred, setDeferred] = useState(null);
+  const [installed, setInstalled] = useState(false);
+
+  useEffect(() => {
+    const standalone =
+      window.matchMedia?.('(display-mode: standalone)').matches ||
+      window.navigator.standalone === true;
+    if (standalone) setInstalled(true);
+
+    function onBeforeInstall(e) {
+      e.preventDefault();
+      setDeferred(e);
+    }
+    function onInstalled() {
+      setInstalled(true);
+      setDeferred(null);
+    }
+
+    window.addEventListener('beforeinstallprompt', onBeforeInstall);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBeforeInstall);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, []);
+
+  if (installed) return null;
+
+  async function handleClick() {
+    if (deferred) {
+      deferred.prompt();
+      const choice = await deferred.userChoice;
+      if (choice?.outcome === 'accepted') setDeferred(null);
+      return;
+    }
+    const ua = window.navigator.userAgent || '';
+    const isIOS = /iphone|ipad|ipod/i.test(ua);
+    if (isIOS) {
+      alert('To install JEEmate: tap the Share icon in Safari, then "Add to Home Screen".');
+    } else {
+      alert('Install not available yet — open this site in Chrome or Edge, or check your browser menu for "Install app".');
+    }
+  }
+
+  return (
+    <button className="install-btn" onClick={handleClick} type="button" title="Install JEEmate as an app">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+        <polyline points="7 10 12 15 17 10" />
+        <line x1="12" y1="15" x2="12" y2="3" />
+      </svg>
+      Install app
+    </button>
+  );
+}
+
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 function Sidebar({ chats, activeId, onNewChat, onSelectChat, onDeleteChat, open, onClose }) {
   return (
@@ -525,6 +584,8 @@ function Sidebar({ chats, activeId, onNewChat, onSelectChat, onDeleteChat, open,
             ))
           )}
         </div>
+
+        <InstallButton />
       </aside>
     </>
   );

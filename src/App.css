@@ -158,6 +158,26 @@
 .chat-item-active .chat-item-del { opacity: 1; }
 .chat-item-del:hover { background: var(--red-light); color: var(--red); }
 
+/* ── Install (PWA) button — sits at the bottom of the sidebar ──────────── */
+.install-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 9px 12px;
+  margin-top: auto;
+  background: var(--bg);
+  border: 1px solid var(--border2);
+  border-radius: var(--r-sm);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 /* Sidebar toggle in top bar (visible only on mobile) */
 .sidebar-toggle {
   display: none;
@@ -373,12 +393,17 @@
   padding-bottom: 4px;
 }
 
-/* ── User bubble ─────────────────────────────────────────────────────────── */
+/* ── User bubble — right-aligned, ChatGPT-style ──────────────────────────── */
 .bubble-user {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
   gap: 6px;
+  width: 100%;
+}
+.bubble-img {
+  display: flex;
+  justify-content: flex-end;
   width: 100%;
 }
 .bubble-img img {
@@ -399,6 +424,7 @@
   line-height: 1.55;
   max-width: 80%;
   text-align: left;
+  align-self: flex-end;
 }
 
 /* ── Error bubble ────────────────────────────────────────────────────────── */
