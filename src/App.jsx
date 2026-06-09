@@ -39,8 +39,12 @@ function saveChatsIndex(list) {
 }
 
 function loadChatMessages(id) {
-  try { return JSON.parse(localStorage.getItem(chatStorageKey(id)) || '[]'); }
-  catch { return []; }
+  try {
+    const raw = JSON.parse(localStorage.getItem(chatStorageKey(id)) || '[]');
+    // Strip the per-render animate flag so old solutions don't re-type when
+    // a chat is re-opened — animation is only for fresh in-session answers.
+    return raw.map((m) => (m.animate ? { ...m, animate: false } : m));
+  } catch { return []; }
 }
 
 function saveChatMessages(id, messages) {
@@ -183,21 +187,54 @@ function MathRenderer({ text }) {
   );
 }
 
+// Reveal `totalStages` items one at a time. We do this on the client so the
+// solution card grows line-by-line (ChatGPT-style) even though the backend
+// returns the whole JSON in one shot — true token streaming would break the
+// structured layout (subject/given/find/steps/answer all need to be complete
+// objects to render). When `replay=false` the card pops in fully — used when
+// re-mounting a chat from localStorage so old solutions don't re-type.
+function useStagedReveal(totalStages, intervalMs = 350, replay = true) {
+  const [stage, setStage] = useState(replay ? 0 : totalStages);
+  useEffect(() => {
+    if (!replay) { setStage(totalStages); return; }
+    if (stage >= totalStages) return;
+    const t = setTimeout(() => setStage((s) => s + 1), intervalMs);
+    return () => clearTimeout(t);
+  }, [stage, totalStages, intervalMs, replay]);
+  return stage;
+}
+
 // ── Solution card ─────────────────────────────────────────────────────────────
-function SolutionCard({ data }) {
+function SolutionCard({ data, animate }) {
   const { solution } = data;
+  const steps = solution.steps || [];
+
+  // Build an ordered list of section keys that actually exist for this
+  // solution — that's the count we stagger over.
+  const sections = ['chips'];
+  if (solution.extracted_question)      sections.push('question');
+  if (solution.given || solution.find)  sections.push('given-find');
+  if (solution.formulas_used?.length)   sections.push('formulas');
+  for (let i = 0; i < steps.length; i++) sections.push(`step-${i}`);
+  if (solution.answer)                  sections.push('answer');
+
+  const stage = useStagedReveal(sections.length, 350, animate);
+  const shown = (key) => sections.indexOf(key) < stage;
+  const isTyping = stage < sections.length;
 
   return (
     <div className="sol-card">
       {/* Chips row */}
-      <div className="sol-meta-row">
-        {solution.subject && <span className="sol-chip chip-subject">{solution.subject}</span>}
-        {solution.topic   && <span className="sol-chip chip-topic">{solution.topic}</span>}
-      </div>
+      {shown('chips') && (
+        <div className="sol-meta-row sol-reveal">
+          {solution.subject && <span className="sol-chip chip-subject">{solution.subject}</span>}
+          {solution.topic   && <span className="sol-chip chip-topic">{solution.topic}</span>}
+        </div>
+      )}
 
       {/* Extracted question */}
-      {solution.extracted_question && (
-        <div className="sol-section">
+      {shown('question') && solution.extracted_question && (
+        <div className="sol-section sol-reveal">
           <span className="sol-label">Question</span>
           <div className="sol-block question-block">
             <MathRenderer text={solution.extracted_question} />
@@ -206,8 +243,8 @@ function SolutionCard({ data }) {
       )}
 
       {/* Given + Find side by side */}
-      {(solution.given || solution.find) && (
-        <div className="sol-pair">
+      {shown('given-find') && (solution.given || solution.find) && (
+        <div className="sol-pair sol-reveal">
           {solution.given && (
             <div className="sol-section sol-half">
               <span className="sol-label">Given</span>
@@ -228,8 +265,8 @@ function SolutionCard({ data }) {
       )}
 
       {/* Formulas used */}
-      {solution.formulas_used?.length > 0 && (
-        <div className="sol-section">
+      {shown('formulas') && solution.formulas_used?.length > 0 && (
+        <div className="sol-section sol-reveal">
           <span className="sol-label">Formulas Used</span>
           <div className="formula-list">
             {solution.formulas_used.map((f, i) => (
@@ -241,32 +278,37 @@ function SolutionCard({ data }) {
         </div>
       )}
 
-      {/* Steps */}
-      {solution.steps?.length > 0 && (
+      {/* Steps — revealed one at a time so each line "types" in */}
+      {steps.length > 0 && shown('step-0') && (
         <div className="sol-section">
           <span className="sol-label">Solution Steps</span>
           <div className="steps-list">
-            {solution.steps.map((step, i) => (
-              <div key={i} className="step-row">
-                <span className="step-num">{i + 1}</span>
-                <div className="step-text">
-                  <MathRenderer text={step} />
+            {steps.map((step, i) =>
+              shown(`step-${i}`) ? (
+                <div key={i} className="step-row sol-reveal">
+                  <span className="step-num">{i + 1}</span>
+                  <div className="step-text">
+                    <MathRenderer text={step} />
+                  </div>
                 </div>
-              </div>
-            ))}
+              ) : null
+            )}
           </div>
         </div>
       )}
 
       {/* Answer */}
-      {solution.answer && (
-        <div className="sol-section">
+      {shown('answer') && solution.answer && (
+        <div className="sol-section sol-reveal">
           <span className="sol-label">Answer</span>
           <div className="answer-block">
             <MathRenderer text={solution.answer} />
           </div>
         </div>
       )}
+
+      {/* Blinking cursor while more sections are still pending */}
+      {isTyping && <span className="sol-cursor" aria-hidden="true" />}
     </div>
   );
 }
@@ -333,7 +375,7 @@ function ResponseArea({ messages, bottomRef, onPickSuggestion }) {
         <div className="messages">
           {messages.map((m, i) => {
             if (m.role === 'user')     return <UserBubble key={i} msg={m} />;
-            if (m.role === 'solution') return <SolutionCard key={i} data={m.data} />;
+            if (m.role === 'solution') return <SolutionCard key={i} data={m.data} animate={!!m.animate} />;
             if (m.role === 'error')    return <ErrorBubble key={i} text={m.text} />;
             return null;
           })}
@@ -689,7 +731,7 @@ export default function App() {
         throw new Error(data.error || data.hint || `Server error ${res.status}`);
       }
 
-      setMessages(prev => [...prev, { role: 'solution', data }]);
+      setMessages(prev => [...prev, { role: 'solution', data, animate: true }]);
     } catch (err) {
       setMessages(prev => [...prev, { role: 'error', text: err.message }]);
     } finally {

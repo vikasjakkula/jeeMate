@@ -453,6 +453,32 @@
   flex-direction: column;
 }
 
+/* Each section fades + slides in when it gets revealed — gives the
+   ChatGPT "line-by-line" feel without breaking KaTeX (which can't render
+   half-typed math). Paired with the JS staged-reveal in App.jsx. */
+.sol-reveal {
+  animation: sol-fade-in 260ms ease-out both;
+}
+@keyframes sol-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Blinking cursor shown while more sections are still pending. */
+.sol-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 1.05em;
+  vertical-align: -2px;
+  margin-top: 6px;
+  background: var(--accent2);
+  border-radius: 1px;
+  animation: sol-blink 1s steps(1) infinite;
+}
+@keyframes sol-blink {
+  50% { opacity: 0; }
+}
+
 /* Chips */
 .sol-meta-row {
   display: flex;
