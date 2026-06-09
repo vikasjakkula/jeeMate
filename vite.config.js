@@ -7,8 +7,7 @@ export default defineConfig({
   resolve: {
     dedupe: ['react', 'react-dom'],
   },
-  // Added helpful hint for 404: NOT_FOUND on Vercel deployments.
-  // If you are seeing a DEPLOYMENT_NOT_FOUND error, ensure your frontend directory is correctly configured as the entrypoint,
-  // deployments are not missing or deleted, and your vercel.json correctly maps the "frontend" service.
-  // See: https://vercel.com/docs/projects/project-structure#monorepos for more info.
+  server: {
+    port: 3000,
+  },
 })
