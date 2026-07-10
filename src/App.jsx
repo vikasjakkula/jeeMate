@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import katex from 'katex';
 import './App.css';
+import Home from "./pages/Home";
+import Dashboard from "./pages/Dashboard";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, '') ||
@@ -339,12 +341,18 @@ function ErrorBubble({ text }) {
 
 // ── Suggested JEE questions shown on the empty starting page ──────────────────
 const SUGGESTIONS = [
-  { subject: 'Maths',     q: 'Evaluate the definite integral ∫₀^(π/2) sin²x / (sin x + cos x) dx using the king property' },
-  { subject: 'Maths',     q: 'Find the sum to n terms of the series 1·2 + 2·3 + 3·4 + … + n(n+1)' },
-  { subject: 'Maths',     q: 'How many distinct arrangements of the letters of MISSISSIPPI are possible such that all four S\'s appear together?' },
-  { subject: 'Physics',   q: 'A particle is projected at 20 m/s at 60° above the horizontal. Find its maximum height, time of flight and range (take g = 10 m/s²)' },
-  { subject: 'Physics',   q: 'Five identical resistors of resistance R are connected in a Wheatstone-bridge configuration. Find the equivalent resistance between the input terminals' },
-  { subject: 'Chemistry', q: 'Calculate the pH of a 0.1 M acetic acid solution given Ka = 1.8 × 10⁻⁵' },
+  { subject: 'Maths',     q: 'If z = (√3 + i)^100, find the value of z along with its modulus and argument, expressing the final answer in the form a + ib' },
+  { subject: 'Maths',     q: 'Find the sum to n terms of the series 1·2·3 + 2·3·4 + 3·4·5 + … + n(n+1)(n+2), and hence find the sum when n = 20' },
+  { subject: 'Maths',     q: 'A committee of 5 members is to be formed from 6 men and 4 women such that at least 2 women are included. In how many ways can this be done, and how many of these arrangements have a specific man and woman both included?' },
+  { subject: 'Maths',     q: 'Find the equation of the plane passing through the points (1, 1, 1), (1, -1, 2) and (-2, 2, -1), and find the perpendicular distance of the point (2, 5, -3) from this plane' },
+  { subject: 'Maths',     q: 'Solve the differential equation dy/dx + y·tan x = sin 2x, given y = 1 when x = 0, and find y at x = π/6' },
+  { subject: 'Physics',   q: 'A block of mass 4 kg is placed on a rough inclined plane of angle 30° with coefficient of friction 0.3. Find the acceleration of the block, the tension if connected via a pulley to a hanging 2 kg mass, and the time taken to travel 5 m from rest (take g = 10 m/s²)' },
+  { subject: 'Physics',   q: 'A parallel plate capacitor of capacitance 6 μF is charged to 100 V and then connected to an uncharged capacitor of 3 μF. Find the common potential, charge on each capacitor, and the heat lost in the process' },
+  { subject: 'Physics',   q: 'A uniform disc of mass 2 kg and radius 0.5 m rolls without slipping down an incline of height 2 m. Find its velocity at the bottom, its angular velocity, and the ratio of translational to rotational kinetic energy' },
+  { subject: 'Physics',   q: 'Two coherent sources separated by 0.5 mm produce an interference pattern on a screen 1 m away using light of wavelength 6000 Å. Find the fringe width, the position of the 4th bright fringe, and the path difference at a point 3 mm from the central maximum' },
+  { subject: 'Chemistry', q: 'For the reaction N₂O₄ ⇌ 2NO₂, Kc = 4.63 × 10⁻³ at 25°C. If 1 mole of N₂O₄ is placed in a 2 L flask, calculate the equilibrium concentrations of both species and the degree of dissociation' },
+  { subject: 'Chemistry', q: 'Calculate the standard cell potential, ΔG°, and equilibrium constant for the reaction Zn(s) + Cu²⁺(aq) → Zn²⁺(aq) + Cu(s), given E°(Zn²⁺/Zn) = -0.76 V and E°(Cu²⁺/Cu) = +0.34 V' },
+  { subject: 'Chemistry', q: 'A buffer solution is prepared by mixing 0.2 M CH₃COOH and 0.3 M CH₃COONa (pKa = 4.74). Calculate the pH of the buffer, and the change in pH after adding 0.01 mol of NaOH to 1 L of this buffer' },
 ];
 
 // ── Response area ─────────────────────────────────────────────────────────────
